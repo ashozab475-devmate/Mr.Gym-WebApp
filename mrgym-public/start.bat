@@ -3,7 +3,7 @@ setlocal
 
 REM === MrGym Public Site - start script (development mode) ===
 REM This starts ONLY the public site (landing/about/faq/join), on port
-REM 3000. It talks to the same MongoDB database as the owner-dashboard
+REM 3000. It talks to the same PostgreSQL database as the owner-dashboard
 REM site, but does not start that other app for you - run its own
 REM start.bat separately (in its own folder / terminal window) if you
 REM want both sites running at once. See ..\CONNECTING_THE_TWO_SITES.md
@@ -16,7 +16,7 @@ echo.
 
 if not exist ".env.local" (
     echo WARNING: .env.local not found.
-    echo Copy .env.local.example to .env.local and set MONGODB_URI
+    echo Copy .env.local.example to .env.local and set DATABASE_URL
     echo ^(and NEXT_PUBLIC_DASHBOARD_URL^) before starting, or the app
     echo will fail to connect to the database.
     echo.
@@ -36,7 +36,7 @@ if not exist "node_modules" (
     )
 )
 
-echo Checking MongoDB connection...
+echo Checking PostgreSQL connection...
 call npm run db:check
 if errorlevel 1 (
     echo.

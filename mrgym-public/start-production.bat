@@ -14,7 +14,7 @@ echo.
 
 if not exist ".env.local" (
     echo WARNING: .env.local not found.
-    echo Copy .env.local.example to .env.local and set MONGODB_URI
+    echo Copy .env.local.example to .env.local and set DATABASE_URL
     echo ^(and NEXT_PUBLIC_DASHBOARD_URL^) before starting, or the app
     echo will fail to connect to the database.
     echo.
@@ -33,7 +33,7 @@ if not exist "node_modules" (
     )
 )
 
-echo Checking MongoDB connection...
+echo Checking PostgreSQL connection...
 call npm run db:check
 if errorlevel 1 (
     echo.

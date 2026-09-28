@@ -6,7 +6,7 @@ REM the other keeps running independently.
 REM
 REM Make sure both mrgym-public\.env.local and
 REM mrgym-owner-dashboard\.env.local are set up first (see
-REM CONNECTING_THE_TWO_SITES.md), and that MongoDB is running.
+REM CONNECTING_THE_TWO_SITES.md), and that PostgreSQL is running.
 
 cd /d "%~dp0"
 

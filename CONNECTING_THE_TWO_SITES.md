@@ -23,33 +23,45 @@ They can be deployed to two different domains/subdomains — e.g.
 
 ## How they're connected
 
-**The two sites share one MongoDB database.** That's the entire
+**The two sites share one PostgreSQL database.** That's the entire
 connection — no API calls between the two sites, no webhooks, nothing
 else to wire up:
 
 1. A client fills out `/join` on `mrgym-public`.
 2. That page calls `mrgym-public`'s own `POST /api/members`, which
-   inserts a new document into the `members` collection of the MongoDB
-   database at `MONGODB_URI`/`MONGODB_DB`.
+   inserts a row into the `members` table of the PostgreSQL database at
+   `DATABASE_URL`.
 3. `mrgym-owner-dashboard` reads from `GET /api/members`, which queries
-   that *same* database/collection — because both projects' `.env.local`
-   point at the same `MONGODB_URI` and `MONGODB_DB`.
+   that *same* database/table — because both projects' environment
+   point at the same `DATABASE_URL`.
 4. The dashboard loads members on page load and re-checks every 60
    seconds, so a new sign-up shows up there automatically, already
    linked to that member's record (payment history, status, etc. all
-   key off the same MongoDB `_id`) — no separate account-linking step,
+   key off the same PostgreSQL UUID) — no separate account-linking step,
    because there's only ever one copy of the data.
 
-**Set the exact same values in both `.env.local` files:**
+**Set the exact same connection string in both `.env.local` files:**
 
 ```
-MONGODB_URI=mongodb://localhost:27017
-MONGODB_DB=mrgym
+DATABASE_URL=postgresql://postgres:your_password@localhost:5432/mrgym
 ```
 
-If you deploy to production, point both projects at the same hosted
-MongoDB instance (e.g. the same MongoDB Atlas cluster/database) the
-same way.
+For local development, install PostgreSQL and create a `mrgym` database.
+For Vercel, provision hosted PostgreSQL (for example, Neon) and set its
+`DATABASE_URL` in both Vercel projects. Both deployments must use the
+same database URL.
+
+### Vercel deployment
+
+For the outstanding Neon setup and verification checklist, see
+[`DATABASE_SETUP.md`](DATABASE_SETUP.md).
+
+Deploy `mrgym-public` and `mrgym-owner-dashboard` as separate Vercel
+projects, each with its own root directory. In each project's Production
+environment variables, set the same `DATABASE_URL` supplied by your
+PostgreSQL provider. Use the provider's SSL-enabled connection string,
+keep it secret, and redeploy both sites. Add the dashboard's Google
+sign-in variables as described in `mrgym-owner-dashboard/README.md`.
 
 `mrgym-public` has no link to the dashboard anywhere in its nav or
 footer — members have no way to discover or reach the owner dashboard
@@ -62,22 +74,20 @@ shared database above.
 ## Running both locally
 
 ```bash
-# terminal 1
+# terminal 1 (with PostgreSQL installed and the mrgym database created)
 cd mrgym-public
 npm install
-cp .env.local.example .env.local   # fill in MongoDB values
+cp .env.local.example .env.local   # set DATABASE_URL
 npm run dev                         # http://localhost:3000
 
 # terminal 2
 cd mrgym-owner-dashboard
 npm install
-cp .env.local.example .env.local   # same Mongo values + Google OAuth
+cp .env.local.example .env.local   # same DATABASE_URL + Google OAuth
 npm run dev                         # http://localhost:3001
 ```
 
-Make sure MongoDB itself is running locally first (see either
-project's README for install instructions — same as the original
-single-project setup).
+Make sure PostgreSQL is running locally and the `mrgym` database exists.
 
 Test the connection: submit `http://localhost:3000/join`, then sign in
 at `http://localhost:3001/login` and open `/dashboard` — the member you
@@ -89,8 +99,8 @@ Each project has its own `start.bat` (dev) and `start-production.bat`
 (production) — see each project's README. To launch **both** at once,
 double-click `start-both.bat` in this folder: it opens two command
 windows, one per site, each running that site's own `start.bat`. Make
-sure both `.env.local` files are set up first, and that MongoDB is
-running.
+sure both `.env.local` files use the same `DATABASE_URL` and PostgreSQL
+is running.
 
 ## What moved where
 
@@ -100,7 +110,7 @@ running.
 | `pages/login.js`, `pages/dashboard/index.js` | `mrgym-owner-dashboard/pages/` |
 | `pages/api/members/index.js` (`POST` only) | `mrgym-public/pages/api/members/index.js` |
 | `pages/api/members/index.js` (`GET`, now also owner-gated `POST`), `[id].js`, `[id]/pay.js`, `stats.js`, `dashboard/query.js`, `auth/[...nextauth].js` | `mrgym-owner-dashboard/pages/api/` |
-| `lib/store.js`, `lib/mongodb.js`, `lib/plans.js` | copied into **both** projects (both need the shared data layer) |
+| `lib/store.js`, `lib/postgres.js`, `lib/plans.js` | copied into **both** projects (both need the shared data layer) |
 | `lib/auth.js`, `lib/anthropicClient.js` | `mrgym-owner-dashboard/lib/` only |
 | `components/Header.jsx`, `Footer.jsx`, `Hero.jsx`, `ProgramSection.jsx`, `TrainersSection.jsx`, `Testimonial.jsx` | `mrgym-public/components/` |
 | `components/StatCard.jsx`, `DefaulterBanner.jsx`, `MemberTable.jsx`, `AddMemberModal.jsx`, `PaymentHistoryModal.jsx` | `mrgym-owner-dashboard/components/` |

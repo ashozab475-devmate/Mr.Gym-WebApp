@@ -1,0 +1,7 @@
+{$PUBLIC_DOMAIN} {
+  reverse_proxy public:3000
+}
+
+{$DASHBOARD_DOMAIN} {
+  reverse_proxy dashboard:3001
+}

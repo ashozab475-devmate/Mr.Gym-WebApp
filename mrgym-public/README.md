@@ -12,7 +12,7 @@ project. See `../CONNECTING_THE_TWO_SITES.md` for how they fit together.
 - **`/faq`** — FAQ page.
 - **`/join`** — member sign-up form (Without Cardio PKR 1500/mo, With
   Cardio PKR 3000/mo). Submitting it calls this site's own
-  `POST /api/members`, which writes straight into the **shared MongoDB
+  `POST /api/members`, which writes straight into the **shared PostgreSQL
   database** — the same database the owner-dashboard site reads from.
   No login required to submit this form, same as before.
 This site has **no** login link, no owner dashboard, and no member
@@ -30,12 +30,12 @@ cp .env.local.example .env.local
 Edit `.env.local`:
 
 ```
-MONGODB_URI=mongodb://localhost:27017
-MONGODB_DB=mrgym
+DATABASE_URL=postgresql://postgres:your_password@localhost:5432/mrgym
 ```
 
-`MONGODB_URI`/`MONGODB_DB` must match the owner-dashboard project's
-values exactly — see `../CONNECTING_THE_TWO_SITES.md`.
+`DATABASE_URL` must match the owner-dashboard project's value exactly —
+see `../CONNECTING_THE_TWO_SITES.md`. Install PostgreSQL locally and
+create the `mrgym` database before starting the app.
 
 ```bash
 npm run dev
@@ -53,7 +53,7 @@ npm start
 ### Windows: one-click start
 
 Two double-clickable scripts are included (require [Node.js](https://nodejs.org)
-and a reachable MongoDB connection - see above):
+and a reachable PostgreSQL connection - see above):
 
 - **`start.bat`** - installs dependencies on first run, then starts the
   dev server on port 3000 and opens your browser. Use this while
@@ -67,5 +67,5 @@ project's `start.bat` and the dashboard's `start.bat` separately.
 
 ## Tech stack
 
-Next.js 14 (Pages Router), React 18, MongoDB driver, Tailwind CSS,
+Next.js 14 (Pages Router), React 18, PostgreSQL (`pg`), Tailwind CSS,
 self-hosted fonts via `@fontsource`.

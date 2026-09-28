@@ -2,9 +2,9 @@ import { addMember } from "../../../lib/store";
 
 // This is the ONLY member-facing API route on the public site. A client
 // filling out /join calls this with no login required, exactly like
-// before. It writes into the same MongoDB database/collection that the
+// before. It writes into the same PostgreSQL database that the
 // owner-dashboard site reads from (both projects point at the same
-// MONGODB_URI/MONGODB_DB — see .env.local.example) — so the moment a
+// DATABASE_URL — see .env.local.example) — so the moment a
 // client registers here, they show up on the owner's dashboard.
 //
 // Reading, editing, marking-paid, and deleting members are intentionally
@@ -27,6 +27,6 @@ export default async function handler(req, res) {
     return res.status(201).json(member);
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ error: "Database error. Is MongoDB running and MONGODB_URI set?" });
+    return res.status(500).json({ error: "Database error. Check that DATABASE_URL is set and PostgreSQL is reachable." });
   }
 }

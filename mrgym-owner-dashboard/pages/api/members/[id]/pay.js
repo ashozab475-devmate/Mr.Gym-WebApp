@@ -19,6 +19,6 @@ export default async function handler(req, res) {
     return res.status(200).json(member);
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ error: "Database error. Is MongoDB running and MONGODB_URI set?" });
+    return res.status(500).json({ error: "Database error. Check that DATABASE_URL is set and PostgreSQL is reachable." });
   }
 }

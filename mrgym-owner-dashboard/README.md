@@ -29,7 +29,7 @@ now live only in `mrgym-public`. Visiting `/` here just redirects to
 ## How members get here
 
 Members never sign up on this site. They register on the public site's
-`/join` page, which writes directly into the **same MongoDB database**
+`/join` page, which writes directly into the **same PostgreSQL database**
 this dashboard reads from (`GET /api/members`, refreshed on load and
 every 60 seconds). See `../CONNECTING_THE_TWO_SITES.md`.
 
@@ -43,13 +43,13 @@ cp .env.local.example .env.local
 Edit `.env.local` — at minimum:
 
 ```
-MONGODB_URI=mongodb://localhost:27017
-MONGODB_DB=mrgym
+DATABASE_URL=postgresql://postgres:your_password@localhost:5432/mrgym
 NEXT_PUBLIC_PUBLIC_SITE_URL=http://localhost:3000
 ```
 
-`MONGODB_URI`/`MONGODB_DB` must match the `mrgym-public` project's
-values exactly.
+`DATABASE_URL` must match the `mrgym-public` project's value exactly.
+Install PostgreSQL locally and create the `mrgym` database before
+starting the app.
 
 Then configure Google sign-in (see the comments in
 `.env.local.example`): create an OAuth client in Google Cloud Console,
@@ -78,7 +78,7 @@ npm start
 ### Windows: one-click start
 
 Two double-clickable scripts are included (require [Node.js](https://nodejs.org),
-a reachable MongoDB connection, and Google sign-in configured - see
+a reachable PostgreSQL connection, and Google sign-in configured - see
 above):
 
 - **`start.bat`** - installs dependencies on first run, then starts the
@@ -94,6 +94,6 @@ project's `start.bat` and the public site's `start.bat` separately.
 
 ## Tech stack
 
-Next.js 14 (Pages Router), React 18, MongoDB driver, NextAuth.js
+Next.js 14 (Pages Router), React 18, PostgreSQL (`pg`), NextAuth.js
 (Google provider), Claude (Anthropic API) for AI search, Tailwind CSS,
 self-hosted fonts via `@fontsource`.

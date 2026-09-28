@@ -1,14 +1,6 @@
-// Member + fee-payment data layer, backed by MongoDB.
-//
-// Collections:
-//   members  { _id, name, email, phone, plan, feeAmount, joinDate, createdAt }
-//   payments { _id, memberId, date, amount }
-//
-// Every function here is async because every call now goes over the
-// network to MongoDB, instead of reading a local JSON file.
+// Member + fee-payment data layer, backed by PostgreSQL.
 
-import { ObjectId } from "mongodb";
-import { getDb } from "./mongodb";
+import { getPool, ensureSchema } from "./postgres";
 
 const CYCLE_DAYS = 30; // a "month" of membership, counted from each payment
 
@@ -76,33 +68,50 @@ function computeStatus(member, memberPayments) {
   };
 }
 
-function serializeMember(doc) {
-  if (!doc) return null;
-  const { _id, ...rest } = doc;
-  return { id: _id.toString(), ...rest };
+const MEMBER_COLUMNS = `id, name, email, phone, plan,
+  fee_amount AS "feeAmount",
+  to_char(join_date, 'YYYY-MM-DD') AS "joinDate",
+  created_at AS "createdAt",
+  to_char(next_due_date_override, 'YYYY-MM-DD') AS "nextDueDateOverride"`;
+
+function isId(value) {
+  return typeof value === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 }
 
-function serializePayment(doc) {
-  const { _id, memberId, ...rest } = doc;
-  return { id: _id.toString(), memberId: memberId.toString(), ...rest };
-}
-
-async function collections() {
-  const db = await getDb();
+function serializeMember(row) {
+  if (!row) return null;
   return {
-    members: db.collection("members"),
-    payments: db.collection("payments"),
+    ...row,
+    id: String(row.id),
+    feeAmount: Number(row.feeAmount),
+    createdAt: row.createdAt instanceof Date
+      ? row.createdAt.toISOString()
+      : row.createdAt,
+  };
+}
+
+function serializePayment(row) {
+  return {
+    ...row,
+    id: String(row.id),
+    memberId: String(row.memberId),
+    amount: Number(row.amount),
   };
 }
 
 export async function getMembersWithStatus() {
-  const { members, payments } = await collections();
-  const memberDocs = await members.find({}).toArray();
-  const paymentDocs = await payments.find({}).toArray();
+  await ensureSchema();
+  const pool = getPool();
+  const [{ rows: memberDocs }, { rows: paymentDocs }] = await Promise.all([
+    pool.query(`SELECT ${MEMBER_COLUMNS} FROM members`),
+    pool.query(`SELECT id, member_id AS "memberId",
+      to_char(payment_date, 'YYYY-MM-DD') AS date, amount FROM payments`),
+  ]);
 
   const result = memberDocs.map((m) => {
     const mine = paymentDocs
-      .filter((p) => p.memberId.toString() === m._id.toString())
+      .filter((p) => p.memberId === m.id)
       .map((p) => ({ ...p, date: p.date }));
     const status = computeStatus(m, mine);
     return { ...serializeMember(m), ...status };
@@ -116,15 +125,21 @@ export async function getMembersWithStatus() {
 }
 
 export async function getMember(id) {
-  if (!ObjectId.isValid(id)) return null;
-  const { members, payments } = await collections();
-  const memberDoc = await members.findOne({ _id: new ObjectId(id) });
+  if (!isId(id)) return null;
+  await ensureSchema();
+  const pool = getPool();
+  const { rows: memberRows } = await pool.query(
+    `SELECT ${MEMBER_COLUMNS} FROM members WHERE id = $1`, [id]
+  );
+  const memberDoc = memberRows[0];
   if (!memberDoc) return null;
 
-  const paymentDocs = await payments
-    .find({ memberId: new ObjectId(id) })
-    .sort({ date: -1 })
-    .toArray();
+  const { rows: paymentDocs } = await pool.query(
+    `SELECT id, member_id AS "memberId",
+      to_char(payment_date, 'YYYY-MM-DD') AS date, amount
+     FROM payments WHERE member_id = $1 ORDER BY payment_date DESC, created_at DESC`,
+    [id]
+  );
 
   const status = computeStatus(memberDoc, paymentDocs);
   return {
@@ -135,82 +150,100 @@ export async function getMember(id) {
 }
 
 export async function addMember({ name, email, phone, plan, feeAmount, joinDate }) {
-  const { members } = await collections();
+  await ensureSchema();
+  const pool = getPool();
   const today = joinDate || todayStr();
-
-  const memberDoc = {
-    name,
-    email: email || "",
-    phone: phone || "",
-    plan: plan || "Without Cardio",
-    feeAmount: Number(feeAmount) || 0,
-    joinDate: today,
-    createdAt: new Date().toISOString(),
-  };
-
-  const { insertedId } = await members.insertOne(memberDoc);
+  const { rows } = await pool.query(
+    `INSERT INTO members (name, email, phone, plan, fee_amount, join_date)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+    [name, email || "", phone || "", plan || "Without Cardio", Number(feeAmount) || 0, today]
+  );
 
   // New joinee starts with "unpaid" status until payment is confirmed/allowed by gym owner.
 
-  return getMember(insertedId.toString());
+  return getMember(rows[0].id);
 }
 
 export async function updateMember(id, updates) {
-  if (!ObjectId.isValid(id)) return null;
-  const { members } = await collections();
+  if (!isId(id)) return null;
+  const fields = {
+    name: "name",
+    email: "email",
+    phone: "phone",
+    plan: "plan",
+    feeAmount: "fee_amount",
+    joinDate: "join_date",
+    nextDueDateOverride: "next_due_date_override",
+  };
+  const entries = Object.entries(fields).filter(([key]) => updates[key] !== undefined);
 
-  const setDoc = { ...updates };
-  if (updates.feeAmount !== undefined) {
-    setDoc.feeAmount = Number(updates.feeAmount);
-  }
-  delete setDoc.id;
-
-  if (setDoc.nextDueDateOverride !== undefined) {
-    if (!isDateString(setDoc.nextDueDateOverride)) {
+  if (updates.nextDueDateOverride !== undefined) {
+    if (!isDateString(updates.nextDueDateOverride)) {
       throw new Error("Next due date must use YYYY-MM-DD format.");
     }
   }
 
-  const res = await members.updateOne(
-    { _id: new ObjectId(id) },
-    { $set: setDoc }
-  );
-  if (res.matchedCount === 0) return null;
+  if (entries.length) {
+    await ensureSchema();
+    const values = entries.map(([key]) =>
+      key === "feeAmount" ? Number(updates[key]) : updates[key]
+    );
+    values.push(id);
+    const assignments = entries.map(([key, column], index) =>
+      `${column} = $${index + 1}`
+    );
+    const { rowCount } = await getPool().query(
+      `UPDATE members SET ${assignments.join(", ")} WHERE id = $${values.length}`,
+      values
+    );
+    if (!rowCount) return null;
+  }
   return getMember(id);
 }
 
 export async function deleteMember(id) {
-  if (!ObjectId.isValid(id)) return false;
-  const { members, payments } = await collections();
-  await members.deleteOne({ _id: new ObjectId(id) });
-  await payments.deleteMany({ memberId: new ObjectId(id) });
-  return true;
+  if (!isId(id)) return false;
+  await ensureSchema();
+  const { rowCount } = await getPool().query("DELETE FROM members WHERE id = $1", [id]);
+  return rowCount > 0;
 }
 
 export async function recordPayment(memberId, amount, date) {
-  if (!ObjectId.isValid(memberId)) return null;
-  const { members, payments } = await collections();
-  const member = await members.findOne({ _id: new ObjectId(memberId) });
-  if (!member) return null;
-
-  await payments.insertOne({
-    memberId: new ObjectId(memberId),
-    date: date || todayStr(),
-    amount: Number(amount) || member.feeAmount,
-  });
-
-  await members.updateOne(
-    { _id: new ObjectId(memberId) },
-    { $unset: { nextDueDateOverride: "" } }
-  );
+  if (!isId(memberId)) return null;
+  await ensureSchema();
+  const pool = getPool();
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query(
+      "SELECT fee_amount AS \"feeAmount\" FROM members WHERE id = $1 FOR UPDATE",
+      [memberId]
+    );
+    if (!rows[0]) {
+      await client.query("ROLLBACK");
+      return null;
+    }
+    await client.query(
+      "INSERT INTO payments (member_id, payment_date, amount) VALUES ($1, $2, $3)",
+      [memberId, date || todayStr(), Number(amount) || Number(rows[0].feeAmount)]
+    );
+    await client.query(
+      "UPDATE members SET next_due_date_override = NULL WHERE id = $1", [memberId]
+    );
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 
   return getMember(memberId);
 }
 
 export async function getStats() {
   const membersWithStatus = await getMembersWithStatus();
-  const { payments } = await collections();
-  const allPayments = await payments.find({}).toArray();
+  const { rows } = await getPool().query("SELECT COALESCE(SUM(amount), 0) AS revenue FROM payments");
 
   return {
     total: membersWithStatus.length,
@@ -218,10 +251,7 @@ export async function getStats() {
     paid: membersWithStatus.filter((m) => m.status === "paid").length,
     dueSoon: membersWithStatus.filter((m) => m.status === "due-soon").length,
     overdue: membersWithStatus.filter((m) => m.status === "overdue").length,
-    revenueCollected: allPayments.reduce(
-      (sum, p) => sum + (Number(p.amount) || 0),
-      0
-    ),
+    revenueCollected: Number(rows[0].revenue),
   };
 }
 

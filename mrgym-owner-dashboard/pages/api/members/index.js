@@ -3,7 +3,7 @@ import { requireOwner } from "../../../lib/auth";
 
 // Both routes here require an authenticated owner session — unlike the
 // public site's /api/members, which only exposes an unauthenticated
-// POST for the /join form. Both projects point at the SAME MongoDB
+// POST for the /join form. Both projects point at the SAME PostgreSQL
 // database, so members created on either site show up here via GET.
 export default async function handler(req, res) {
   const session = await requireOwner(req, res);
@@ -30,6 +30,6 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: `Method ${req.method} not allowed` });
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ error: "Database error. Is MongoDB running and MONGODB_URI set?" });
+    return res.status(500).json({ error: "Database error. Check that DATABASE_URL is set and PostgreSQL is reachable." });
   }
 }
