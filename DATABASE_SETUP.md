@@ -24,4 +24,4 @@ The local URLs are now configured for Neon. Vercel Console currently requires si
 
 The application no longer reads or writes MongoDB, and there is no MongoDB importer in the repository. Existing MongoDB records have **not** been copied or deleted. Decide whether those records need to be retained before removing the old MongoDB instance or its backups; wiping them is separate and irreversible.
 
-See [CONNECTING_THE_TWO_SITES.md](CONNECTING_THE_TWO_SITES.md) for the relationship between the two apps and [VPS_DEPLOYMENT.md](VPS_DEPLOYMENT.md) for the Docker-based PostgreSQL deployment.
+See [CONNECTING_THE_TWO_SITES.md](CONNECTING_THE_TWO_SITES.md) for how the two apps share Neon and are deployed separately on Vercel.
